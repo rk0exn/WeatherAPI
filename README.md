@@ -9,4 +9,6 @@ Weather API for C# using https://github.com/tsukumijima/weather-api
 - **Frozen Collections**:
   - `System.Collections.Frozen` for optimized immutability.
 - **External Weather API**: [https://weather.tsukumijima.net/api/forecast](https://weather.tsukumijima.net/api/forecast)
-- **If you use on .NET Framework, you require `System.Text.Json` and `System.Collections.Immutable` NuGet!**
+
+## IMPORTANT NOTIFICATION
+**If you use on .NET Framework, you require `System.Text.Json` and `System.Collections.Immutable` NuGet packages!**
