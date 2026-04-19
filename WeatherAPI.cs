@@ -1,312 +1,241 @@
-﻿// Copyright (c) 2025 rk0exn_
-// WeatherAPI v2.2
+// Copyright (c) 2025 - 2026 rk0exn_
+// WeatherAPI v4
 
-using System;
 using System.Collections.Frozen;
-using System.Linq;
-using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 using System.Xml.Linq;
 
-namespace Weather;
+namespace WAPI;
 
-public static class WeatherAPI
+// ---------------------------
+// JSON モデル (record class and context)
+// ---------------------------
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.Unspecified, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, WriteIndented = false)]
+[JsonSerializable(typeof(WeatherJson))]
+[JsonSerializable(typeof(WeatherJsonLocation))]
+[JsonSerializable(typeof(WeatherJsonDescription))]
+[JsonSerializable(typeof(WeatherJsonForecasts))]
+[JsonSerializable(typeof(WeatherJsonForecastsDetail))]
+[JsonSerializable(typeof(WeatherJsonForecastsTemperature))]
+[JsonSerializable(typeof(Temperature))]
+[JsonSerializable(typeof(WeatherJsonForecastsChanceOfRain))]
+[JsonSerializable(typeof(WeatherJsonForecastsImage))]
+[JsonSerializable(typeof(WeatherJsonCopyright))]
+[JsonSerializable(typeof(WeatherJsonCopyrightImage))]
+[JsonSerializable(typeof(WeatherJsonCopyrightProvider))]
+internal partial class WeatherJsonContext : JsonSerializerContext { }
+
+public record WeatherJson(
+	[property: JsonPropertyName("publicTime")] string Time,
+	[property: JsonPropertyName("publicTimeFormatted")] string FormattedTime,
+	[property: JsonPropertyName("publishingOffice")] string Publisher,
+	[property: JsonPropertyName("title")] string Title,
+	[property: JsonPropertyName("link")] string URL,
+	[property: JsonPropertyName("description")] WeatherJsonDescription Description,
+	[property: JsonPropertyName("forecasts")] WeatherJsonForecasts[] Forecasts,
+	[property: JsonPropertyName("location")] WeatherJsonLocation Location,
+	[property: JsonPropertyName("copyright")] WeatherJsonCopyright Copyright
+);
+
+public record WeatherJsonLocation(
+	[property: JsonPropertyName("area")] string Area,
+	[property: JsonPropertyName("prefecture")] string Prefecture,
+	[property: JsonPropertyName("district")] string District,
+	[property: JsonPropertyName("city")] string City
+);
+
+public record WeatherJsonDescription(
+	[property: JsonPropertyName("publicTime")] string Time,
+	[property: JsonPropertyName("publicTimeFormatted")] string FormattedTime,
+	[property: JsonPropertyName("headlineText")] string HeadLineText,
+	[property: JsonPropertyName("bodyText")] string BodyText,
+	[property: JsonPropertyName("text")] string Text
+);
+
+public record WeatherJsonForecasts(
+	[property: JsonPropertyName("date")] string Date,
+	[property: JsonPropertyName("dateLabel")] string DateLabel,
+	[property: JsonPropertyName("telop")] string Telop,
+	[property: JsonPropertyName("detail")] WeatherJsonForecastsDetail Detail,
+	[property: JsonPropertyName("temperature")] WeatherJsonForecastsTemperature Temperature,
+	[property: JsonPropertyName("chanceOfRain")] WeatherJsonForecastsChanceOfRain ChanceOfRain,
+	[property: JsonPropertyName("image")] WeatherJsonForecastsImage Image
+);
+
+public record WeatherJsonForecastsDetail(
+	[property: JsonPropertyName("weather")] string Weather,
+	[property: JsonPropertyName("wind")] string Wind,
+	[property: JsonPropertyName("wave")] string Wave
+);
+
+public record WeatherJsonForecastsTemperature(
+	[property: JsonPropertyName("min")] Temperature Min,
+	[property: JsonPropertyName("max")] Temperature Max
+);
+
+public record Temperature(
+	[property: JsonPropertyName("celsius")] string Celsius,
+	[property: JsonPropertyName("fahrenheit")] string Fahrenheit
+);
+
+public record WeatherJsonForecastsChanceOfRain(
+	[property: JsonPropertyName("T00_06")] string Time00To06,
+	[property: JsonPropertyName("T06_12")] string Time06To12,
+	[property: JsonPropertyName("T12_18")] string Time12To18,
+	[property: JsonPropertyName("T18_24")] string Time18To24
+);
+
+public record WeatherJsonForecastsImage(
+	[property: JsonPropertyName("title")] string Title,
+	[property: JsonPropertyName("url")] string URL,
+	[property: JsonPropertyName("width")] int Width,
+	[property: JsonPropertyName("height")] int Height
+);
+
+public record WeatherJsonCopyright(
+	[property: JsonPropertyName("title")] string Title,
+	[property: JsonPropertyName("link")] string Link,
+	[property: JsonPropertyName("image")] WeatherJsonCopyrightImage Image,
+	[property: JsonPropertyName("provider")] WeatherJsonCopyrightProvider[] Provider
+);
+
+public record WeatherJsonCopyrightImage(
+	[property: JsonPropertyName("title")] string Title,
+	[property: JsonPropertyName("link")] string Link,
+	[property: JsonPropertyName("url")] string URL,
+	[property: JsonPropertyName("width")] int Width,
+	[property: JsonPropertyName("height")] int Height
+);
+
+public record WeatherJsonCopyrightProvider(
+	[property: JsonPropertyName("link")] string Link,
+	[property: JsonPropertyName("name")] string Name,
+	[property: JsonPropertyName("note")] string Note
+);
+
+public static class WapiNx
 {
-	private static string H1(string s) => $"# {s}";
-	private static string H2(string s) => $"## {s}";
-	private static string H3(string s) => $"### {s}";
-	private static string H0(string s) => $"-# {s}";
-	private static string Italic(string s) => $"*{s}*";
-	private static string Bold(string s) => $"**{s}**";
-	private static string Italic2(string s) => $"_{s}_";
-	private static string Under(string s) => $"__{s}__";
-	private static string Strike(string s) => $"~~{s}~~";
-	private static string List(string s) => $"- {s}";
-	private static string List2(string s) => $"* {s}";
-	private const string ListIndent = "  ";
-	private static string Spoiler(string s) => $"||{s}||";
-	private static string Code(string s) => $"`{s}`";
-	private static string CodeEx(string s) => $"` {s} `";
-	private static string CodeBlock(string s) => $"```\n{s}\n```";
-	private static string CodeBlockEx(string s, string syntax) => $"```{syntax}\n{s}\n```";
-	private static string Quote(string s) => $"> {s}";
-	private static string Escape(string s) => $"\\{s}";
+	// ---------------------------
+	// HttpClient（再利用）
+	// ---------------------------
+	private static readonly HttpClient Http = new()
+	{
+		Timeout = TimeSpan.FromSeconds(10)
+	};
 
-	public static async Task<(string str, bool err)> GetWeatherAsync(string id)
+	// ---------------------------
+	// メイン API
+	// ---------------------------
+	public static async Task<(string str, bool err)> GetWeatherAsync(
+		string id)
 	{
 		try
 		{
-			string localeurl = $"https://weather.tsukumijima.net/api/forecast?city={id}";
-			using HttpClient clnt = new();
-			var res = await clnt.GetAsync(localeurl);
-			var rsp = await res.Content.ReadAsStringAsync();
-			var end = rsp.Replace("\\n", "\\\\n");
-			var jsd = JsonDocument.Parse(end);
-			var rst = JsonSerializer.Deserialize<WeatherJson>(jsd, new JsonSerializerOptions() { PropertyNamingPolicy = null, WriteIndented = false, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
-			int ge = DateTime.Now.Hour >= 17 ? 1 : 0;
-			var frc = rst.Forecasts[ge];
-			var fd0 = frc.Date.Split('-');
-			var fd1 = $"{fd0[0]}年 {fd0[1]}月 {fd0[2]}日";
-			string str = $"{(ge == 1 ? $"{H0("17時以降は翌日の天気が表示されます。\n")}" : "")}{H1($"{fd1} {rst.Location.Prefecture} {rst.Location.District} {rst.Location.City} の天気")}\n{frc.Detail.Weather}\n最低気温：{(frc.Temperature.Min.Celsius ?? "-")}℃\n最高気温：{frc.Temperature.Max.Celsius ?? "-"}℃\n0～6時の降水確率：{frc.ChanceOfRain.Time00To06}\n6～12時の降水確率：{frc.ChanceOfRain.Time06To12}\n12～18時の降水確率：{frc.ChanceOfRain.Time12To18}\n18～24時の降水確率：{frc.ChanceOfRain.Time18To24}\n解説：{rst.Description.BodyText.Substring(1).Replace("\\n", "\n")}\n{H0($"情報元：{rst.Copyright.Provider[0].Name}")}\n{H0($"データ加工：{rst.Copyright.Title}")}\n{H0($"データ取得元：{rst.Copyright.Link}")}";
-			return (str, false);
+			var url = $"https://weather.tsukumijima.net/api/forecast?city={id}";
+			using var res = await Http.GetAsync(url);
+
+			if (!res.IsSuccessStatusCode)
+				return ($"API response error: {res.StatusCode}", true);
+
+			await using var stream = await res.Content.ReadAsStreamAsync();
+			var data = await JsonSerializer.DeserializeAsync(stream, WeatherJsonContext.Default.WeatherJson);
+
+			if (data is null)
+				return ("Invalid JSON format.", true);
+
+			var index = DateTime.Now.Hour >= 17 ? 1 : 0;
+			var fc = data.Forecasts[index];
+
+			var (y, m, d) = fc.Date.Split('-') is var f && (f.Length == 3)
+				? (f[0], f[1], f[2])
+				: ("????", "??", "??");
+
+			var dateStr = $"{y}年 {m}月 {d}日";
+
+			var text =
+$"""
+{(index == 1 ? "17時以降は翌日の天気が表示されます。\n" : "")}
+{dateStr} {data.Location.Prefecture} {data.Location.District} {data.Location.City} の天気
+{fc.Detail.Weather}
+
+最低気温：{fc.Temperature.Min?.Celsius ?? "-"}℃
+最高気温：{fc.Temperature.Max?.Celsius ?? "-"}℃
+
+0～6時：{fc.ChanceOfRain.Time00To06}
+6～12時：{fc.ChanceOfRain.Time06To12}
+12～18時：{fc.ChanceOfRain.Time12To18}
+18～24時：{fc.ChanceOfRain.Time18To24}
+
+解説：
+{(data.Description.BodyText?.Replace("\\n", "\n") ?? "")}
+
+情報元：{data.Copyright.Provider.FirstOrDefault()?.Name}
+データ加工：{data.Copyright.Title}
+取得元：{data.Copyright.Link}
+""";
+
+			return (text, false);
 		}
 		catch (Exception ex)
 		{
-			return ($"Error: {ex.Message} (Error code: {ex.HResult} ({ex.HResult:X})", true);
+			return ($"Error: {ex.Message} (code {ex.HResult:X})", true);
 		}
 	}
 
+	// ---------------------------
+	// 地点一覧
+	// ---------------------------
 	private static readonly FrozenSet<string> Places =
 	[
-		"011000", "012010", "012020", "013010", "013020", "013030", "014010", "014020", "014030", "015010",
-			"015020", "016010", "016020", "016030", "017010", "017020", "020010", "020020", "020030", "030010",
-			"030020", "030030", "040010", "040020", "050010", "050020", "060010", "060020", "060030", "060040",
-			"070010", "070020", "070030", "080010", "080020", "090010", "090020", "100010", "100020", "110010",
-			"110020", "110030", "120010", "120020", "120030", "130010", "130020", "130030", "130040", "140010",
-			"140020", "150010", "150020", "150030", "150040", "160010", "160020", "170010", "170020", "180010",
-			"180020", "190010", "190020", "200010", "200020", "200030", "210010", "210020", "220010", "220020",
-			"220030", "220040", "230010", "230020", "240010", "240020", "250010", "250020", "260010", "260020",
-			"270000", "280010", "280020", "290010", "290020", "300010", "300020", "310010", "310020", "320010",
-			"320020", "320030", "330010", "330020", "340010", "340020", "350010", "350020", "350030", "350040",
-			"360010", "360020", "370000", "380010", "380020", "380030", "390010", "390020", "390030", "400010",
-			"400020", "400030", "400040", "410010", "410020", "420010", "420020", "430010", "430020", "430030",
-			"430040", "440010", "440020", "440030", "440040", "450010", "450020", "450030", "450040", "460010",
-			"460020", "460030", "460040", "471010", "471020", "471030", "472000", "473000", "474010", "474020"
+		"011000","012010","012020","013010","013020","013030","014010","014020","014030","015010",
+		"015020","016010","016020","016030","017010","017020","020010","020020","020030","030010",
+		"030020","030030","040010","040020","050010","050020","060010","060020","060030","060040",
+		"070010","070020","070030","080010","080020","090010","090020","100010","100020","110010",
+		"110020","110030","120010","120020","120030","130010","130020","130030","130040","140010",
+		"140020","150010","150020","150030","150040","160010","160020","170010","170020","180010",
+		"180020","190010","190020","200010","200020","200030","210010","210020","220010","220020",
+		"220030","220040","230010","230020","240010","240020","250010","250020","260010","260020",
+		"270000","280010","280020","290010","290020","300010","300020","310010","310020","320010",
+		"320020","320030","330010","330020","340010","340020","350010","350020","350030","350040",
+		"360010","360020","370000","380010","380020","380030","390010","390020","390030","400010",
+		"400020","400030","400040","410010","410020","420010","420020","430010","430020","430030",
+		"430040","440010","440020","440030","440040","450010","450020","450030","450040","460010",
+		"460020","460030","460040","471010","471020","471030","472000","473000","474010","474020"
 	];
 
-	public static bool CheckAvailablePlace(string id) => Places.Contains(id);
+	public static bool CheckAvailablePlace(string id) =>
+		Places.Contains(id);
 
+	// ---------------------------
+	// 地域リスト取得
+	// ---------------------------
 	public static async Task<string> GetPlaceListAsync()
 	{
 		try
 		{
-			string tex = null;
-			var lnk = new Uri("https://weather.tsukumijima.net/primary_area.xml", UriKind.Absolute);
-			var web = new HttpClient();
-			var xml = await web.GetStringAsync(lnk);
-			var xmdc = XDocument.Parse(xml);
-			var cities = xmdc.Descendants("city").Select(c => new
-			{
-				Title = c.Attribute("title").Value,
-				ID = c.Attribute("id").Value
-			});
+			var xml = await Http.GetStringAsync("https://weather.tsukumijima.net/primary_area.xml");
+			var doc = XDocument.Parse(xml);
 
-			var cnt = -1;
-			const int cnt_max = 4;
-			tex += "# 場所IDの一覧\n```txt\n";
-			foreach (var city in cities)
-			{
-				switch (cnt)
-				{
-					case cnt_max:
-					case -1:
-						tex += "\n";
-						break;
-				}
-				cnt = cnt == cnt_max ? 0 : cnt + 1;
+			var items = doc.Descendants("city")
+				.Select(x => $"{(string)x.Attribute("title")!}：{(string)x.Attribute("id")!}")
+				.Chunk(5)
+				.Select(chunk => string.Join("\t", chunk));
 
-				tex += $"{city.Title}：{city.ID}\t";
-			}
-			tex += $"```{Bold("※これに載っていない地点は取得できません。")}\n{Bold("17時以降は次の日の天気が表示されるように切り替わります。")}";
-			return tex;
+			var body = string.Join("\n", items);
+
+			return
+$"""
+場所IDの一覧
+{body}
+※これに載っていない地点は取得できません。
+17時以降は次の日の天気が表示されます。
+""";
 		}
 		catch
 		{
-			return "問題が発生したため、場所IDのリストを取得できませんでした。";
+			return "場所 ID の取得に失敗しました。";
 		}
-	}
-
-	public class WeatherJson
-	{
-		[JsonPropertyName("publicTime")]
-		public string Time { get; set; }
-
-		[JsonPropertyName("publicTimeFormatted")]
-		public string FormattedTime { get; set; }
-
-		[JsonPropertyName("publishingOffice")]
-		public string Publisher { get; set; }
-
-		[JsonPropertyName("title")]
-		public string Title { get; set; }
-
-		[JsonPropertyName("link")]
-		public string URL { get; set; }
-
-		[JsonPropertyName("description")]
-		public WeatherJsonDescription Description { get; set; }
-
-		[JsonPropertyName("forecasts")]
-		public WeatherJsonForecasts[] Forecasts { get; set; }
-
-		[JsonPropertyName("location")]
-		public WeatherJsonLocation Location { get; set; }
-
-		[JsonPropertyName("copyright")]
-		public WeatherJsonCopyright Copyright { get; set; }
-	}
-
-	public class WeatherJsonCopyright
-	{
-		[JsonPropertyName("title")]
-		public string Title { get; set; }
-
-		[JsonPropertyName("link")]
-		public string Link { get; set; }
-
-		[JsonPropertyName("image")]
-		public WeatherJsonCopyrightImage Image { get; set; }
-
-		[JsonPropertyName("provider")]
-		public WeatherJsonCopyrightProvider[] Provider { get; set; }
-	}
-
-	public class WeatherJsonCopyrightProvider
-	{
-		[JsonPropertyName("link")]
-		public string Link { get; set; }
-
-		[JsonPropertyName("name")]
-		public string Name { get; set; }
-
-		[JsonPropertyName("note")]
-		public string Note { get; set; }
-	}
-
-	public class WeatherJsonCopyrightImage
-	{
-		[JsonPropertyName("title")]
-		public string Title { get; set; }
-
-		[JsonPropertyName("link")]
-		public string Link { get; set; }
-
-		[JsonPropertyName("url")]
-		public string URL { get; set; }
-
-		[JsonPropertyName("width")]
-		public int Width { get; set; }
-
-		[JsonPropertyName("height")]
-		public int Height { get; set; }
-	}
-
-	public class WeatherJsonLocation
-	{
-		[JsonPropertyName("area")]
-		public string Area { get; set; }
-
-		[JsonPropertyName("prefecture")]
-		public string Prefecture { get; set; }
-
-		[JsonPropertyName("district")]
-		public string District { get; set; }
-
-		[JsonPropertyName("city")]
-		public string City { get; set; }
-	}
-
-	public class WeatherJsonDescription
-	{
-		[JsonPropertyName("publicTime")]
-		public string Time { get; set; }
-
-		[JsonPropertyName("publicTimeFormatted")]
-		public string FormattedTime { get; set; }
-
-		[JsonPropertyName("headlineText")]
-		public string HeadLineText { get; set; }
-
-		[JsonPropertyName("bodyText")]
-		public string BodyText { get; set; }
-
-		[JsonPropertyName("text")]
-		public string Text { get; set; }
-	}
-
-	public class WeatherJsonForecasts
-	{
-		[JsonPropertyName("date")]
-		public string Date { get; set; }
-
-		[JsonPropertyName("dateLabel")]
-		public string DateLabel { get; set; }
-
-		[JsonPropertyName("telop")]
-		public string Telop { get; set; }
-
-		[JsonPropertyName("detail")]
-		public WeatherJsonForecastsDetail Detail { get; set; }
-
-		[JsonPropertyName("temperature")]
-		public WeatherJsonForecastsTemperature Temperature { get; set; }
-
-		[JsonPropertyName("chanceOfRain")]
-		public WeatherJsonForecastsChanceOfRain ChanceOfRain { get; set; }
-
-		[JsonPropertyName("image")]
-		public WeatherJsonForecastsImage Image { get; set; }
-	}
-
-	public class WeatherJsonForecastsImage
-	{
-		[JsonPropertyName("title")]
-		public string Title { get; set; }
-
-		[JsonPropertyName("url")]
-		public string URL { get; set; }
-
-		[JsonPropertyName("width")]
-		public int Width { get; set; }
-
-		[JsonPropertyName("height")]
-		public int Height { get; set; }
-	}
-
-	public class WeatherJsonForecastsChanceOfRain
-	{
-		[JsonPropertyName("T00_06")]
-		public string Time00To06 { get; set; }
-
-		[JsonPropertyName("T06_12")]
-		public string Time06To12 { get; set; }
-
-		[JsonPropertyName("T12_18")]
-		public string Time12To18 { get; set; }
-
-		[JsonPropertyName("T18_24")]
-		public string Time18To24 { get; set; }
-	}
-
-	public class WeatherJsonForecastsTemperature
-	{
-		[JsonPropertyName("min")]
-		public Temperature Min { get; set; }
-
-		[JsonPropertyName("max")]
-		public Temperature Max { get; set; }
-	}
-
-	public class Temperature
-	{
-		[JsonPropertyName("celsius")]
-		public string Celsius { get; set; }
-
-		[JsonPropertyName("fahrenheit")]
-		public string Fahrenheit { get; set; }
-	}
-
-	public class WeatherJsonForecastsDetail
-	{
-		[JsonPropertyName("weather")]
-		public string Weather { get; set; }
-
-		[JsonPropertyName("wind")]
-		public string Wind { get; set; }
-
-		[JsonPropertyName("wave")]
-		public string Wave { get; set; }
 	}
 }
