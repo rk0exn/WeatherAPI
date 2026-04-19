@@ -1,44 +1,63 @@
-import requests
-from datetime import datetime
+import urllib.request
 
-def get_weather(id: str):
-    try:
-        url = f"https://weather.tsukumijima.net/api/forecast?city={id}"
-        res = requests.get(url, timeout=10)
+class WeatherAPI:
 
-        if res.status_code != 200:
-            return f"API response error: {res.status_code}", True
+    class Forecast:
+        def __init__(self):
+            self.date = ""
+            self.dateLabel = ""
+            self.telop = ""
+            self.weather = ""
 
-        data = res.json()
+    class Result:
+        def __init__(self):
+            self.title = ""
+            self.forecasts = []
 
-        index = 1 if datetime.now().hour >= 17 else 0
-        fc = data["forecasts"][index]
+    @staticmethod
+    def fetch(city: str):
+        url = f"https://weather.tsukumijima.net/api/forecast?city={city}"
+        with urllib.request.urlopen(url, timeout=10) as r:
+            data = r.read().decode()
 
-        y, m, d = fc["date"].split("-")
-        date_str = f"{y}年 {m}月 {d}日"
+        return WeatherAPI._parse(data)
 
-        text = f"""
-{"17時以降は翌日の天気が表示されます。\n" if index == 1 else ""}
-{date_str} {data["location"]["prefecture"]} {data["location"]["district"]} {data["location"]["city"]} の天気
-{fc["detail"]["weather"]}
+    @staticmethod
+    def _parse(json: str):
+        r = WeatherAPI.Result()
+        r.title = WeatherAPI._ext(json, '"title":"')
 
-最低気温：{(fc["temperature"]["min"] or {}).get("celsius", "-")}℃
-最高気温：{(fc["temperature"]["max"] or {}).get("celsius", "-")}℃
+        pos = 0
+        while True:
+            pos = json.find('"date":"', pos)
+            if pos == -1:
+                break
 
-0～6時：{fc["chanceOfRain"]["T00_06"]}
-6～12時：{fc["chanceOfRain"]["T06_12"]}
-12～18時：{fc["chanceOfRain"]["T12_18"]}
-18～24時：{fc["chanceOfRain"]["T18_24"]}
+            f = WeatherAPI.Forecast()
+            f.date = WeatherAPI._ext_from(json, '"date":"', pos)
+            f.dateLabel = WeatherAPI._ext_from(json, '"dateLabel":"', pos)
+            f.telop = WeatherAPI._ext_from(json, '"telop":"', pos)
+            f.weather = WeatherAPI._ext_from(json, '"weather":"', pos)
 
-解説：
-{data["description"]["bodyText"].replace("\\n", "\n")}
+            r.forecasts.append(f)
+            pos += 10
 
-情報元：{data["copyright"]["provider"][0]["name"] if data["copyright"]["provider"] else ""}
-データ加工：{data["copyright"]["title"]}
-取得元：{data["copyright"]["link"]}
-"""
+        return r
 
-        return text, False
+    @staticmethod
+    def _ext(s, key):
+        i = s.find(key)
+        if i < 0:
+            return ""
+        i += len(key)
+        j = s.find('"', i)
+        return s[i:j]
 
-    except Exception as e:
-        return f"Error: {str(e)}", True
+    @staticmethod
+    def _ext_from(s, key, start):
+        i = s.find(key, start)
+        if i < 0:
+            return ""
+        i += len(key)
+        j = s.find('"', i)
+        return s[i:j]
