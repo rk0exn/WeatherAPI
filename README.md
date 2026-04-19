@@ -11,4 +11,4 @@ Weather API for C# using https://github.com/tsukumijima/weather-api
 - **External Weather API**: [https://weather.tsukumijima.net/api/forecast](https://weather.tsukumijima.net/api/forecast)
 
 ## IMPORTANT NOTIFICATION
-**If you use on .NET Framework, you require `System.Text.Json` and `System.Collections.Immutable` NuGet packages!**
+**This project will work on .NET 10 or later!**
