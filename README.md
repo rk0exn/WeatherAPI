@@ -3,7 +3,6 @@ Weather API for C# using https://github.com/tsukumijima/weather-api
 
 ## Dependencies
 - **System Libraries**:
-  - `System`, `System.Linq`, `System.Net.Http`, `System.Threading.Tasks`
   - `System.Text.Json`, `System.Text.Json.Serialization`
   - `System.Xml.Linq`
 - **Frozen Collections**:
